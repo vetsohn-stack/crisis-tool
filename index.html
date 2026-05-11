@@ -62,6 +62,17 @@ input.srch{width:100%;padding:7px 11px;font-size:13px;border:0.5px solid #ccc;bo
 .xbtn:hover{background:#f5f5f3;}
 .empty{color:#aaa;font-size:13px;font-style:italic;}
 .hint{font-size:12px;color:#aaa;margin-top:4px;}
+
+.paste-area{width:100%;height:140px;padding:8px 11px;font-size:12px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;resize:vertical;font-family:inherit;}
+.paste-area:focus{outline:none;box-shadow:0 0 0 2px #ccc;}
+.parse-btn{padding:7px 18px;font-size:13px;border:0.5px solid #ccc;border-radius:8px;cursor:pointer;background:#1a1a1a;color:#fff;margin-top:7px;}
+.parse-btn:hover{background:#333;}
+.parse-result{margin-top:10px;padding:10px 12px;background:#f9f9f7;border:0.5px solid #e0e0e0;border-radius:8px;font-size:13px;display:none;}
+.tab-wrap{display:flex;gap:0;margin-bottom:16px;border:0.5px solid #ddd;border-radius:8px;overflow:hidden;}
+.main-tab{flex:1;padding:9px 0;font-size:13px;cursor:pointer;background:#f9f9f7;color:#666;border:none;text-align:center;}
+.main-tab.on{background:#1a1a1a;color:#fff;font-weight:500;}
+.panel{display:none;}.panel.on{display:block;}
+
 </style>
 </head>
 <body>
@@ -69,6 +80,12 @@ input.srch{width:100%;padding:7px 11px;font-size:13px;border:0.5px solid #ccc;bo
 <h1>ASF 위기단계 발령 관리</h1>
 <p class="sub">발생시군·일자 입력 → 유효기간 자동 관리 → 위기단계 발령 목록</p>
 
+<div class="tab-wrap">
+  <button class="main-tab on" onclick="switchMain('manual')">직접 입력</button>
+  <button class="main-tab" onclick="switchMain('paste')">카톡 붙여넣기</button>
+</div>
+
+<div class="panel on" id="panel-manual">
 <div class="type-row">
   <span class="lbl">입력 유형</span>
   <button class="tbtn a" id="ba" onclick="setType('asf')">ASF 발생 (유효 3년)</button>
@@ -85,6 +102,20 @@ input.srch{width:100%;padding:7px 11px;font-size:13px;border:0.5px solid #ccc;bo
 <input class="srch" type="text" placeholder="시군 검색..." oninput="doSearch(this.value)" id="si"/>
 <div class="sgrid" id="sgrid"></div>
 <div class="hint" id="sel-hint">시군을 클릭하여 선택 후 날짜를 지정하고 추가하세요.</div>
+
+</div><!-- end panel-manual -->
+
+<div class="panel" id="panel-paste">
+  <p style="font-size:13px;color:#666;margin-bottom:8px;">카톡 메시지를 그대로 붙여넣으세요. 날짜와 시군을 자동으로 인식합니다.</p>
+  <textarea class="paste-area" id="paste-input" placeholder="'26.5.6(수) 야생멧돼지 ASF 검출(2건) 보고 드립니다.
+(1)#4486 폐사체: 강원도 화천군 상서면 구운리 1169
+(2)#4487 폐사체: 충청북도 제천시 백운면 도곡리 산12-2"></textarea>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:7px;">
+    <button class="parse-btn" onclick="parsePaste('wild')">🐗 야생멧돼지로 등록</button>
+    <button class="parse-btn" style="background:#791F1F;" onclick="parsePaste('asf')">🐖 농장 발생으로 등록</button>
+  </div>
+  <div class="parse-result" id="parse-result"></div>
+</div>
 
 <div class="div"></div>
 
@@ -408,6 +439,78 @@ records.push({id:35,name:"포천시",type:"wild",occDate:new Date(2026,3,29),exp
 records.push({id:36,name:"화천군",type:"wild",occDate:new Date(2026,4,6),expDate:new Date(2026,5,5),parentId:null});
 rid=37;
 // ─────────────────────────────
+
+function switchMain(t){
+  document.querySelectorAll('.main-tab').forEach((el,i)=>el.classList.toggle('on',['manual','paste'][i]===t));
+  document.getElementById('panel-manual').classList.toggle('on',t==='manual');
+  document.getElementById('panel-paste').classList.toggle('on',t==='paste');
+}
+
+function parsePaste(type){
+  const text=document.getElementById('paste-input').value.trim();
+  if(!text){alert('텍스트를 붙여넣어 주세요.');return;}
+
+  // 날짜 파싱: '26.5.6 / 26.5.6 / 2026.5.6 / 2026-05-06
+  let dateStr='';
+  const dm=text.match(/'?(\d{2})\.(\d{1,2})\.(\d{1,2})/);
+  if(dm){
+    dateStr=`20${dm[1]}-${String(dm[2]).padStart(2,'0')}-${String(dm[3]).padStart(2,'0')}`;
+  } else {
+    const dm2=text.match(/(\d{4})[-.]?(\d{1,2})[-.]?(\d{1,2})/);
+    if(dm2) dateStr=`${dm2[1]}-${String(dm2[2]).padStart(2,'0')}-${String(dm2[3]).padStart(2,'0')}`;
+  }
+  if(!dateStr){alert('날짜를 인식하지 못했습니다.\n예: 26.5.6 또는 2026.05.06');return;}
+
+  // 시군 파싱: "강원도 화천군", "경기도 파주시", "울산광역시 북구" 등
+  const sigunRe=/(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주|충북|충남|전북|전남|경북|경남)[도특별시광역자치]*\s*([가-힣]+(?:시|군))/g;
+  const metroRe=/(서울|부산|대구|인천|광주|대전|울산)[특별광역시]*\s*([가-힣]+구)/g;
+
+  const found=new Map(); // name → true (중복제거)
+  let m;
+  while((m=sigunRe.exec(text))!==null) found.set(m[1],true);
+  while((m=metroRe.exec(text))!==null){
+    // 광역시구 → "울산북구" 형태로
+    const METRO_KO={'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산'};
+    found.set(METRO_KO[m[1]]+m[2],true);
+  }
+
+  if(found.size===0){alert('시군을 인식하지 못했습니다.\n주소에 "경기도 파주시" 또는 "강원도 화천군" 형태가 있어야 합니다.');return;}
+
+  // 날짜 계산
+  const [oy,om,od]=dateStr.split('-').map(Number);
+  const occDate=new Date(oy,om-1,od);
+  const today=new Date();today.setHours(0,0,0,0);
+  if(occDate>today){alert('발생일자가 오늘 이후입니다. 확인해주세요.');return;}
+
+  let expDate;
+  if(type==='wild'){
+    expDate=new Date(oy,om-1,od);expDate.setDate(expDate.getDate()+30);
+  } else {
+    expDate=new Date(oy+3,om-1,od);
+  }
+
+  // 등록
+  const added=[];
+  found.forEach((_, name)=>{
+    records=records.filter(r=>!(r.name===name&&r.type===type&&!r.parentId));
+    records.push({id:rid++,name,type,occDate,expDate,parentId:null});
+    added.push(name);
+  });
+
+  // 결과 표시
+  const res=document.getElementById('parse-result');
+  res.style.display='block';
+  const typeLabel=type==='wild'?'야생멧돼지':'ASF 농장';
+  const expStr=`${expDate.getFullYear()}.${expDate.getMonth()+1}.${expDate.getDate()}`;
+  res.innerHTML=`<b style="color:#1a1a1a;">✓ 등록 완료</b><br>
+    날짜: ${dateStr} (만료 ${expStr})<br>
+    구분: ${typeLabel}<br>
+    시군: <b>${added.join(', ')}</b>`;
+
+  document.getElementById('paste-input').value='';
+  renderGrid();renderRecords();updateResult();
+}
+
 buildSido();renderGrid();renderRecords();updateResult();
 </script>
 </body>
