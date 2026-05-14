@@ -410,7 +410,7 @@ function initMap(){
 
   document.getElementById('map').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:14px;">지도 데이터 불러오는 중...</div>';
 
-  fetch('https://vetsohn-stack.github.io/crisis-tool/geo.json')
+  fetch('./geo.json')
     .then(r=>r.json())
     .then(GEO_DATA=>{
       document.getElementById('map').innerHTML='';
